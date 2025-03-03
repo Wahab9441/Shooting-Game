@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Game</title>
+  <style>
+    *,
+    html,
+    body {
+      padding: 0;
+      margin: 0;
+      box-sizing: border-box;
+      overflow: hidden;
+      font-family: cursive;
+      background: black;
+    }
+
+    .score {
+      color: #fff;
+      padding: 10px;
+      position: fixed;
+      font-size: 20px;
+    }
+
+    .high-score {
+      color: #fff;
+      padding: 10px;
+      position: fixed;
+      top: 40px;
+      font-size: 20px;
+    }
+
+    .pause {
+      position: absolute;
+      top: 10px;
+      right: 20px;
+      font-size: 20px;
+      color: white;
+      cursor: pointer;
+    }
+
+    .destroy {
+      position: absolute;
+      right: 20px;
+      bottom: 40px;
+      color: red;
+      font-size: 30px;
+      font-weight: bold;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    .shop-btn {
+      position: absolute;
+      top: 50px;
+      right: 20px;
+      font-size: 20px;
+      color: white;
+      cursor: pointer;
+    }
+
+    .shop {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      text-align: center;
+    }
+
+    .shop button {
+      display: block;
+      margin: 10px 0;
+      padding: 10px;
+      width: 100%;
+      color: #fff;
+    }
+    .h2{
+      color: #fff;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="score">Score: <span>0</span></div>
+  <div class="high-score">High Score: <span>0</span></div>
+  <div class="pause">❚❚</div>
+  <div class="destroy">3</div>
+  <div class="shop-btn">Shop</div>
+  <canvas id="can"></canvas>
+
+  <div class="shop">
+    <h2 class="h2">Shooop</h2>
+    <button onclick="buyDestroy()">Buy Destroy (Cost: 25)</button>
+    <button onclick="buyHelper()">Buy Helper (Cost: 200)</button>
+    <button onclick="closeShop()">Close</button>
+  </div>
+
+  <script>
+    let $ = e => document.querySelector(e);
+    let ran = n => Math.random() * n;
+    let c = can.getContext('2d');
+    can.width = innerWidth;
+    can.height = innerHeight;
+    let w = can.width, h = can.height;
+
+    let pause = false;
+    let score = 0;
+    let highScore = localStorage.getItem('highScore') || 0;
+    let destroy = 3;
+    let playerAlive = true;
+    let helperActive = false;
+
+    $('.high-score span').innerHTML = highScore;
+
+    class Player {
+      constructor(x, y, radius, color) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.color = color;
+      }
+
+      draw() {
+        c.beginPath();
+        c.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        c.fillStyle = this.color;
+        c.fill();
+      }
+    }
+
+    class Projectile {
+      constructor(x, y, radius, color, velocity) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.color = color;
+        this.velocity = velocity;
+      }
+
+      update() {
+        this.draw();
+        this.x += this.velocity.x;
+        this.y += this.velocity.y;
+      }
+
+      draw() {
+        c.beginPath();
+        c.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        c.fillStyle = this.color;
+        c.fill();
+      }
+    }
+
+    class Enemy {
+      constructor(x, y, radius, color, velocity) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.color = color;
+        this.velocity = velocity;
+      }
+
+      update() {
+        this.draw();
+        this.x += this.velocity.x;
+        this.y += this.velocity.y;
+      }
+
+      draw() {
+        c.beginPath();
+        c.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        c.fillStyle = this.color;
+        c.fill();
+      }
+    }
+
+    class Particle {
+      constructor(x, y, radius, color, velocity) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.color = color;
+        this.velocity = velocity;
+        this.alpha = 1;
+      }
+
+      draw() {
+        c.save();
+        c.globalAlpha = this.alpha;
+        c.beginPath();
+        c.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        c.fillStyle = this.color;
+        c.fill();
+        c.restore();
+      }
+
+      update() {
+        this.draw();
+        this.x += this.velocity.x;
+        this.y += this.velocity.y;
+        this.alpha -= 0.01;
+      }
+    }
+
+    class Helper {
+      constructor(x, y, radius, color) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.color = color;
+        this.velocity = { x: (Math.random() - 0.5) * 6, y: (Math.random() - 0.5) * 6 }; // Random movement, faster speed
+        this.enemiesDestroyed = 0; // Track enemies destroyed by the helper
+      }
+
+      draw() {
+        c.beginPath();
+        c.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        c.fillStyle = this.color;
+        c.fill();
+      }
+
+      update() {
+        this.draw();
+        this.x += this.velocity.x;
+        this.y += this.velocity.y;
+
+        // Bounce off walls
+        if (this.x + this.radius > w || this.x - this.radius < 0) this.velocity.x *= -1;
+        if (this.y + this.radius > h || this.y - this.radius < 0) this.velocity.y *= -1;
+
+        // Check for collisions with enemies
+        enemies.forEach((e, i) => {
+          let dist = Math.hypot(this.x - e.x, this.y - e.y);
+          if (dist - this.radius - e.radius < 1) {
+            createExplosion(e.x, e.y, e.color);
+            enemies.splice(i, 1);
+            this.enemiesDestroyed++;
+            score++;
+            $('.score span').innerHTML = score;
+            if (score % 10 === 0) destroy++;
+            $('.destroy').innerHTML = destroy;
+
+            // Remove helper after 5 kills
+            if (this.enemiesDestroyed >= 5) {
+              helpers.splice(helpers.indexOf(this), 1);
+            }
+          }
+        });
+      }
+    }
+
+    let player = new Player(w / 2, h / 2, 40, 'white');
+    let projectiles = [];
+    let enemies = [];
+    let particles = [];
+    let helpers = [];
+
+    function createEnemy() {
+      let radius = Math.random() * (30 - 10) + 10;
+      let x = Math.random() < 0.5 ? -radius : w + radius;
+      let y = Math.random() * h;
+      let color = `hsl(${Math.random() * 360}, 90%, 50%)`;
+      let angle = Math.atan2(h / 2 - y, w / 2 - x);
+      let velocity = { x: Math.cos(angle), y: Math.sin(angle) };
+      enemies.push(new Enemy(x, y, radius, color, velocity));
+    }
+
+    function createExplosion(x, y, color) {
+      for (let i = 0; i < 10; i++) {
+        let velocity = { x: (Math.random() - 0.5) * 4, y: (Math.random() - 0.5) * 4 };
+        particles.push(new Particle(x, y, 2, color, velocity));
+      }
+    }
+
+    setInterval(() => {
+      if (!pause) createEnemy();
+    }, 1000);
+
+    function animate() {
+      if (pause || !playerAlive) return;
+      requestAnimationFrame(animate);
+      c.fillStyle = 'rgba(0,0,0,0.1)';
+      c.fillRect(0, 0, w, h);
+      player.draw();
+
+      projectiles.forEach((p, i) => {
+        p.update();
+        if (p.x < 0 || p.x > w || p.y < 0 || p.y > h) projectiles.splice(i, 1);
+      });
+
+      enemies.forEach((e, i) => {
+        e.update();
+
+        let dist = Math.hypot(player.x - e.x, player.y - e.y);
+        if (dist - e.radius - player.radius < 1) {
+          playerAlive = false;
+          localStorage.setItem('highScore', Math.max(score, highScore));
+          location.reload();
+        }
+
+        projectiles.forEach((p, j) => {
+          let dist = Math.hypot(p.x - e.x, p.y - e.y);
+          if (dist - e.radius - p.radius < 1) {
+            createExplosion(e.x, e.y, e.color);
+            enemies.splice(i, 1);
+            projectiles.splice(j, 1);
+            score++;
+            $('.score span').innerHTML = score;
+            if (score % 50 === 0) destroy++;
+            $('.destroy').innerHTML = destroy;
+          }
+        });
+      });
+
+      // Update particles
+      particles.forEach((particle, index) => {
+        if (particle.alpha <= 0) {
+          particles.splice(index, 1);
+        } else {
+          particle.update();
+        }
+      });
+
+      // Update helpers
+      helpers.forEach((helper, i) => {
+        helper.update();
+        if (helper.enemiesDestroyed >= 5) {
+          helpers.splice(i, 1); // Remove helper after 5 kills
+        }
+      });
+    }
+
+    addEventListener('click', (e) => {
+      if (pause || !playerAlive) return;
+      let angle = Math.atan2(e.clientY - h / 2, e.clientX - w / 2);
+      let velocity = { x: Math.cos(angle) * 8, y: Math.sin(angle) * 8 };
+      projectiles.push(new Projectile(w / 2, h / 2, 5, 'white', velocity));
+    });
+
+    $('.destroy').addEventListener('click', () => {
+      if (destroy > 0) {
+        destroy--;
+        $('.destroy').innerHTML = destroy;
+        for (let i = 0; i < 6.28; i += 0.1) {
+          let velocity = { x: Math.cos(i) * 5, y: Math.sin(i) * 5 };
+          projectiles.push(new Projectile(w / 2, h / 2, 5, 'blue', velocity));
+        }
+      }
+    });
+
+    $('.pause').addEventListener('click', () => {
+      pause = !pause;
+      $('.pause').innerHTML = pause ? "▶" : "❚❚";
+      if (!pause) animate();
+    });
+
+    $('.shop-btn').addEventListener('click', () => {
+      pause = true;
+      $('.shop').style.display = 'block';
+    });
+
+    function closeShop() {
+      $('.shop').style.display = 'none';
+      pause = false;
+      animate();
+    }
+
+    function buyDestroy() {
+      if (score >= 25) {
+        score -= 25;
+        $('.score span').innerHTML = score;
+        destroy++;
+        $('.destroy').innerHTML = destroy;
+        closeShop();
+      }
+    }
+
+    function buyHelper() {
+      if (score >= 200) {
+        score -= 200;
+        $('.score span').innerHTML = score;
+        helpers.push(new Helper(w / 2, h / 2, 20, 'white'));
+        closeShop();
+      }
+    }
+
+    animate();
+  </script>
+</body>
+
+</html>
